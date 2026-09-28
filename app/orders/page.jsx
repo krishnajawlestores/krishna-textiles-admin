@@ -362,7 +362,7 @@ export default function OrdersPage() {
                           {o.paymentStatus}
                         </span>
                         <div className="text-[10px] text-brand-600 dark:text-brand-400 font-medium mt-1">
-                          {o.paymentMethod?.includes('CARD') ? 'Card Payment' : 'GPay / UPI'}
+                          {o.paymentMethod === 'RAZORPAY' ? 'Razorpay Online' : o.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery' : o.paymentMethod?.includes('CARD') ? 'Card Payment' : 'GPay / UPI'}
                         </div>
                       </td>
 
@@ -768,6 +768,50 @@ export default function OrdersPage() {
                 </div>
               </div>
 
+              {/* Payment and Transaction Details */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-dark-700 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Payment & Gateway Details</h4>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    selectedOrder.paymentStatus === 'PAID'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                  }`}>
+                    {selectedOrder.paymentStatus}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Payment Mode</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {selectedOrder.paymentMethod === 'RAZORPAY' ? 'Razorpay Online Gateway' : selectedOrder.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery (COD)' : selectedOrder.paymentMethod || 'Online'}
+                    </span>
+                  </div>
+                  {selectedOrder.razorpayPaymentId && (
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Razorpay Payment ID</span>
+                      <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded text-[11px] border border-emerald-200 dark:border-emerald-800">
+                        {selectedOrder.razorpayPaymentId}
+                      </span>
+                    </div>
+                  )}
+                  {selectedOrder.razorpayOrderId && (
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Razorpay Order ID</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px]">
+                        {selectedOrder.razorpayOrderId}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Order Total Amount</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      ₹{selectedOrder.totalAmount?.toLocaleString('en-IN')} (incl. GST)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Order Line Items */}
               <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-dark-700">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Order Items</h4>
@@ -872,7 +916,14 @@ export default function OrdersPage() {
                   <div className="font-bold text-slate-500 uppercase tracking-wider mb-1">Shipping Destination</div>
                   <div className="text-slate-700 leading-relaxed">{invoiceData.order.shippingAddress || 'Store Pickup'}</div>
                   <div className="mt-2 text-slate-600">
-                    Payment: <span className="font-semibold">Online ({invoiceData.order.paymentMethod?.includes('CARD') ? 'Card' : 'GPay / UPI'})</span> ({invoiceData.order.paymentStatus})
+                    Payment: <span className="font-semibold">
+                      {invoiceData.order.paymentMethod === 'RAZORPAY' ? 'Razorpay Online' : invoiceData.order.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery (COD)' : invoiceData.order.paymentMethod}
+                    </span> ({invoiceData.order.paymentStatus})
+                    {invoiceData.order.razorpayPaymentId && (
+                      <span className="block text-[11px] font-mono text-slate-500 mt-0.5">
+                        Razorpay Txn: {invoiceData.order.razorpayPaymentId}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

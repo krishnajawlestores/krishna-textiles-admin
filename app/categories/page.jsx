@@ -21,40 +21,7 @@ import {
   LayoutGrid,
   List
 } from 'lucide-react';
-
-// Compress image to max 500KB
-async function compressImage(file, maxKB = 500) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        const MAX_DIM = 1200;
-        if (width > MAX_DIM || height > MAX_DIM) {
-          const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        const tryCompress = (q) => {
-          const dataUrl = canvas.toDataURL('image/jpeg', q);
-          const sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
-          if (sizeKB <= maxKB || q <= 0.1) resolve(dataUrl);
-          else tryCompress(q - 0.08);
-        };
-        tryCompress(0.92);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+import { compressImage } from '@/lib/imageCompressor';
 
 export default function CategoriesPage() {
   const { confirm: confirmModal } = useModal();

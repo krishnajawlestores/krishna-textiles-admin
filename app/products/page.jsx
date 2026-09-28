@@ -48,47 +48,8 @@ const CHILD_SIZES = [
 
 const COMMON_SIZES = [...ADULT_SIZES, ...CHILD_SIZES];
 const MAX_IMAGES = 5;
-const MAX_SIZE_KB = 150;
-
-// Compress an image File to max 150KB as base64 data URL (prevents 413 Payload Too Large)
-async function compressImage(file, maxKB = MAX_SIZE_KB) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let quality = 0.82;
-        let width = img.width;
-        let height = img.height;
-        // Downscale to max 850px for fast uploads and crisp display
-        const MAX_DIM = 850;
-        if (width > MAX_DIM || height > MAX_DIM) {
-          const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const tryCompress = (q) => {
-          const dataUrl = canvas.toDataURL('image/jpeg', q);
-          const sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
-          if (sizeKB <= maxKB || q <= 0.2) {
-            resolve(dataUrl);
-          } else {
-            tryCompress(q - 0.08);
-          }
-        };
-        tryCompress(quality);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+const MAX_SIZE_KB = 490; // Strictly under 500 KB limit
+import { compressImage } from '@/lib/imageCompressor';
 
 export default function ProductsPage() {
   const { confirm: confirmModal } = useModal();
@@ -804,7 +765,7 @@ export default function ProductsPage() {
                           Click to upload product photos
                         </div>
                         <div className="text-[11px] text-slate-400 mt-1">
-                          JPG, PNG, WEBP · Max {MAX_IMAGES} images · Auto-compressed to {MAX_SIZE_KB}KB
+                          JPG, PNG, WEBP · Max {MAX_IMAGES} images · WebP auto-compressed (&lt; 500KB)
                         </div>
                       </>
                     )}

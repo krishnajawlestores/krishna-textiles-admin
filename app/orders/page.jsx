@@ -210,9 +210,25 @@ export default function OrdersPage() {
 
     setSavingPayment(true);
     try {
+      let finalProofUrl = modalPaymentProof;
+      if (modalPaymentStatus === 'PAID' && modalPaymentProof && modalPaymentProof.startsWith('data:')) {
+        try {
+          const uploadRes = await api.upload.uploadBase64(
+            modalPaymentProof,
+            'Bill',
+            `bill_receipt_${paymentModalOrder.orderNumber}`,
+          );
+          if (uploadRes?.data?.url) {
+            finalProofUrl = uploadRes.data.url;
+          }
+        } catch (uploadErr) {
+          console.warn('S3 Bill upload fallback to base64', uploadErr);
+        }
+      }
+
       const payload = {
         paymentStatus: modalPaymentStatus,
-        paymentProofUrl: modalPaymentStatus === 'PAID' ? modalPaymentProof : null,
+        paymentProofUrl: modalPaymentStatus === 'PAID' ? finalProofUrl : null,
         paymentReceivedAt: modalPaymentStatus === 'PAID' ? (modalPaymentReceivedAt ? new Date(modalPaymentReceivedAt).toISOString() : new Date().toISOString()) : null,
         paymentNotes: modalPaymentNotes || undefined,
       };

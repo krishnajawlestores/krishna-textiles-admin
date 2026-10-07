@@ -235,7 +235,17 @@ export default function ProductsPage() {
     setCompressing(true);
     try {
       const compressed = await Promise.all(toProcess.map((f) => compressImage(f)));
-      setUploadedImages((prev) => [...prev, ...compressed].slice(0, MAX_IMAGES));
+      const uploadedUrls = await Promise.all(
+        compressed.map(async (b64) => {
+          try {
+            const res = await api.upload.uploadBase64(b64, 'products');
+            return res?.data?.url || b64;
+          } catch {
+            return b64;
+          }
+        })
+      );
+      setUploadedImages((prev) => [...prev, ...uploadedUrls].slice(0, MAX_IMAGES));
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to process image. Please try again.' });
       setTimeout(() => setMessage(null), 3000);
@@ -278,9 +288,16 @@ export default function ProductsPage() {
     setColorCompressingIndex(idx);
     try {
       const compressed = await compressImage(file);
+      let finalUrl = compressed;
+      try {
+        const res = await api.upload.uploadBase64(compressed, 'products');
+        if (res?.data?.url) finalUrl = res.data.url;
+      } catch (uploadErr) {
+        console.warn('S3 upload fallback to base64', uploadErr);
+      }
       setColorVariants((prev) => {
         const copy = [...prev];
-        copy[idx] = { ...copy[idx], image: compressed };
+        copy[idx] = { ...copy[idx], image: finalUrl };
         return copy;
       });
     } catch (err) {

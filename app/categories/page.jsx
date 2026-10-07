@@ -68,7 +68,16 @@ export default function CategoriesPage() {
     try {
       const compressed = await compressImage(file);
       setImagePreview(compressed);
-      setFormData((prev) => ({ ...prev, image: compressed }));
+      let finalUrl = compressed;
+      try {
+        const uploadRes = await api.upload.uploadBase64(compressed, 'Category');
+        if (uploadRes?.data?.url) {
+          finalUrl = uploadRes.data.url;
+        }
+      } catch (uploadErr) {
+        console.warn('S3 Category upload fallback to base64', uploadErr);
+      }
+      setFormData((prev) => ({ ...prev, image: finalUrl }));
     } catch (e) {
       setMessage({ type: 'error', text: 'Failed to process image.' });
       setTimeout(() => setMessage(null), 3000);

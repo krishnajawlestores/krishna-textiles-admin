@@ -441,7 +441,7 @@ export default function CmsBannersPage() {
                       <>
                         <Upload className="w-6 h-6 text-slate-400 mb-1" />
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Click to upload banner image</span>
-                        <span className="text-[11px] text-slate-400 mt-0.5">JPG, PNG, WEBP · WebP auto-compressed (&lt; 500KB)</span>
+                        <span className="text-[11px] text-slate-400 mt-0.5">JPG, PNG, WEBP · Auto-converted to WebP &amp; compressed &lt; 500KB</span>
                       </>
                     )}
                   </div>

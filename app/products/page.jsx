@@ -765,7 +765,7 @@ export default function ProductsPage() {
                           Click to upload product photos
                         </div>
                         <div className="text-[11px] text-slate-400 mt-1">
-                          JPG, PNG, WEBP · Max {MAX_IMAGES} images · WebP auto-compressed (&lt; 500KB)
+                          JPG, PNG, WEBP · Max {MAX_IMAGES} images · Auto-converted to WebP &amp; compressed &lt; 500KB
                         </div>
                       </>
                     )}
@@ -930,7 +930,7 @@ export default function ProductsPage() {
                                       {col.image ? 'Change Photo' : `Upload ${col.name || 'Color'} Shirt Photo`}
                                     </span>
                                     <span className="text-[9px] text-slate-400 mt-0.5">
-                                      {col.name ? `${col.name} shirt photo` : 'Shirt/Item photo in this color'}
+                                      {col.name ? `${col.name} photo (WebP < 500KB)` : 'Auto WebP compressed < 500KB'}
                                     </span>
                                   </>
                                 )}

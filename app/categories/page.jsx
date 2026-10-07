@@ -512,7 +512,7 @@ export default function CategoriesPage() {
                       <>
                         <Upload className="w-6 h-6 text-slate-400 mb-1" />
                         <span className="text-xs text-slate-500 dark:text-slate-400">Click to upload banner image</span>
-                        <span className="text-[11px] text-slate-400">JPG, PNG, WEBP · Auto-compressed to 500KB</span>
+                        <span className="text-[11px] text-slate-400">JPG, PNG, WEBP · Auto-converted to WebP &amp; compressed &lt; 500KB</span>
                       </>
                     )}
                   </div>

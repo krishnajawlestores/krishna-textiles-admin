@@ -27,7 +27,10 @@ import {
   History,
   Tag,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  User,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const FULFILLMENT_STAGES = [
@@ -60,6 +63,21 @@ export default function OrdersPage() {
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [statusNote, setStatusNote] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Customer Details Modal State
+  const [customerModalOrder, setCustomerModalOrder] = useState(null);
+
+  // Payment Status & Proof Modal State
+  const [paymentModalOrder, setPaymentModalOrder] = useState(null);
+  const [modalPaymentStatus, setModalPaymentStatus] = useState('PAID');
+  const [modalPaymentProof, setModalPaymentProof] = useState('');
+  const [modalPaymentProofPreview, setModalPaymentProofPreview] = useState('');
+  const [modalPaymentReceivedAt, setModalPaymentReceivedAt] = useState('');
+  const [modalPaymentNotes, setModalPaymentNotes] = useState('');
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  // Proof Lightbox State
+  const [viewProofImage, setViewProofImage] = useState(null);
 
   useEffect(() => {
     loadOrders();
@@ -127,6 +145,99 @@ export default function OrdersPage() {
         message: 'Failed to generate GST tax invoice data. Please try again.',
         type: 'danger',
       });
+    }
+  };
+
+  const handleOpenCustomerDetails = (order) => {
+    setCustomerModalOrder(order);
+  };
+
+  const handleOpenPaymentModal = (order) => {
+    setPaymentModalOrder(order);
+    setModalPaymentStatus(order.paymentStatus === 'PAID' ? 'PAID' : 'PAID');
+    setModalPaymentProof(order.paymentProofUrl || '');
+    setModalPaymentProofPreview(order.paymentProofUrl || '');
+    const defaultDate = order.paymentReceivedAt 
+      ? new Date(order.paymentReceivedAt).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16);
+    setModalPaymentReceivedAt(defaultDate);
+    setModalPaymentNotes(order.paymentNotes || '');
+  };
+
+  const handleProofFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showModalAlert({
+        title: 'Invalid File',
+        message: 'Please upload an image file (PNG, JPG, JPEG, WEBP).',
+        type: 'danger',
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showModalAlert({
+        title: 'File Too Large',
+        message: 'Payment screenshot image must not exceed 10MB.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result;
+      setModalPaymentProof(dataUrl);
+      setModalPaymentProofPreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSavePaymentStatus = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!paymentModalOrder) return;
+
+    if (modalPaymentStatus === 'PAID' && !modalPaymentProof) {
+      showModalAlert({
+        title: 'Payment Screenshot Required',
+        message: 'Please upload a screenshot of the payment received before confirming payment status.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    setSavingPayment(true);
+    try {
+      const payload = {
+        paymentStatus: modalPaymentStatus,
+        paymentProofUrl: modalPaymentStatus === 'PAID' ? modalPaymentProof : null,
+        paymentReceivedAt: modalPaymentStatus === 'PAID' ? (modalPaymentReceivedAt ? new Date(modalPaymentReceivedAt).toISOString() : new Date().toISOString()) : null,
+        paymentNotes: modalPaymentNotes || undefined,
+      };
+
+      await api.orders.updatePayment(paymentModalOrder.id, payload);
+      await loadOrders();
+
+      if (selectedOrder && (selectedOrder.id === paymentModalOrder.id || selectedOrder.orderNumber === paymentModalOrder.id)) {
+        await handleOpenDetail(paymentModalOrder.id);
+      }
+
+      setPaymentModalOrder(null);
+      showModalAlert({
+        title: 'Payment Status Updated',
+        message: `Order #${paymentModalOrder.orderNumber} payment marked as '${modalPaymentStatus === 'PAID' ? 'Payment Received' : 'Payment Pending'}'.`,
+        type: 'success',
+      });
+    } catch (err) {
+      showModalAlert({
+        title: 'Payment Update Failed',
+        message: err.message || 'Failed to update payment status. Please try again.',
+        type: 'danger',
+      });
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -354,15 +465,47 @@ export default function OrdersPage() {
                       </td>
 
                       <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          o.paymentStatus === 'PAID'
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                        }`}>
-                          {o.paymentStatus}
-                        </span>
-                        <div className="text-[10px] text-brand-600 dark:text-brand-400 font-medium mt-1">
-                          {o.paymentMethod === 'RAZORPAY' ? 'Razorpay Online' : o.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery' : o.paymentMethod?.includes('CARD') ? 'Card Payment' : 'GPay / UPI'}
+                        <div className="space-y-1.5">
+                          <div>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              o.paymentStatus === 'PAID'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            }`}>
+                              {o.paymentStatus === 'PAID' ? 'Payment Received' : 'Payment Pending'}
+                            </span>
+                          </div>
+
+                          {o.paymentStatus === 'PAID' && o.paymentReceivedAt && (
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                              Recv: {new Date(o.paymentReceivedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </div>
+                          )}
+
+                          {o.paymentProofUrl && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setViewProofImage({ url: o.paymentProofUrl, orderNumber: o.orderNumber, name: o.customerName })}
+                                className="inline-flex items-center space-x-1 text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                                title="View screenshot proof of payment received"
+                              >
+                                <ImageIcon className="w-3 h-3 text-brand-600 dark:text-brand-400" />
+                                <span>View Proof</span>
+                              </button>
+                            </div>
+                          )}
+
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPaymentModal(o)}
+                              className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 border border-slate-200 dark:border-dark-700 rounded-lg transition-colors cursor-pointer"
+                              title="Update payment status and upload screenshot proof"
+                            >
+                              {o.paymentStatus === 'PAID' ? 'Edit Payment' : 'Mark Received'}
+                            </button>
+                          </div>
                         </div>
                       </td>
 
@@ -408,17 +551,29 @@ export default function OrdersPage() {
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end space-x-2">
                           <button
-                            onClick={() => handleOpenDetail(o.id)}
-                            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-dark-700 transition-colors"
-                            title="Track Timeline & Manage"
+                            type="button"
+                            onClick={() => handleOpenCustomerDetails(o)}
+                            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 font-bold text-xs border border-indigo-200 dark:border-indigo-500/30 transition-all cursor-pointer shadow-sm hover:shadow"
+                            title="View Customer Details (Name, Order Date, Mobile, Address)"
                           >
-                            <History className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-                            <span>Track & Details</span>
+                            <User className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                            <span>Customer Details</span>
                           </button>
 
                           <button
+                            type="button"
+                            onClick={() => handleOpenDetail(o.id)}
+                            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-dark-700 transition-colors cursor-pointer"
+                            title="Track Timeline & Manage"
+                          >
+                            <History className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                            <span>Track</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleOpenInvoice(o.id)}
-                            className="p-1.5 rounded-xl bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-dark-700 transition-colors"
+                            className="p-1.5 rounded-xl bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-dark-700 transition-colors cursor-pointer"
                             title="Print GST Tax Invoice"
                           >
                             <Printer className="w-3.5 h-3.5" />
@@ -768,48 +923,92 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Payment and Transaction Details */}
-              <div className="p-4 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-dark-700 shadow-sm space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Payment & Gateway Details</h4>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                    selectedOrder.paymentStatus === 'PAID'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                  }`}>
-                    {selectedOrder.paymentStatus}
-                  </span>
+              {/* Payment and Verification Details */}
+              <div className="p-5 rounded-2xl bg-white dark:bg-dark-900 border border-slate-200 dark:border-dark-700 shadow-sm space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Payment Status & Verification</h4>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
+                      selectedOrder.paymentStatus === 'PAID'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                    }`}>
+                      {selectedOrder.paymentStatus === 'PAID' ? 'Payment Received' : 'Payment Pending'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPaymentModal(selectedOrder)}
+                      className="px-3 py-1 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                    >
+                      {selectedOrder.paymentStatus === 'PAID' ? 'Update Payment' : 'Mark Payment Received'}
+                    </button>
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Payment Mode</span>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {selectedOrder.paymentMethod === 'RAZORPAY' ? 'Razorpay Online Gateway' : selectedOrder.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery (COD)' : selectedOrder.paymentMethod || 'Online'}
+                      Direct Mill Order (Pay on Contact)
                     </span>
                   </div>
-                  {selectedOrder.razorpayPaymentId && (
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Razorpay Payment ID</span>
-                      <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded text-[11px] border border-emerald-200 dark:border-emerald-800">
-                        {selectedOrder.razorpayPaymentId}
-                      </span>
-                    </div>
-                  )}
-                  {selectedOrder.razorpayOrderId && (
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Razorpay Order ID</span>
-                      <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px]">
-                        {selectedOrder.razorpayOrderId}
-                      </span>
-                    </div>
-                  )}
                   <div>
                     <span className="text-slate-400 block text-[11px]">Order Total Amount</span>
                     <span className="font-bold text-slate-900 dark:text-white">
                       ₹{selectedOrder.totalAmount?.toLocaleString('en-IN')} (incl. GST)
                     </span>
                   </div>
+                  {selectedOrder.paymentReceivedAt && (
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Payment Received Date</span>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        {new Date(selectedOrder.paymentReceivedAt).toLocaleString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {selectedOrder.paymentNotes && (
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Admin Payment Note</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {selectedOrder.paymentNotes}
+                      </span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Screenshot proof if available */}
+                {selectedOrder.paymentProofUrl && (
+                  <div className="pt-3 border-t border-slate-100 dark:border-dark-800">
+                    <span className="text-slate-400 block text-[11px] font-bold uppercase tracking-wider mb-2">
+                      Payment Received Proof Screenshot
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={selectedOrder.paymentProofUrl}
+                        alt="Payment Proof"
+                        onClick={() => setViewProofImage({ url: selectedOrder.paymentProofUrl, orderNumber: selectedOrder.orderNumber, name: selectedOrder.customerName })}
+                        className="w-20 h-20 rounded-xl object-cover border-2 border-brand-500/30 cursor-pointer hover:opacity-90 shadow-sm transition-opacity"
+                        title="Click to view full image"
+                      />
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setViewProofImage({ url: selectedOrder.paymentProofUrl, orderNumber: selectedOrder.orderNumber, name: selectedOrder.customerName })}
+                          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-dark-800 hover:bg-slate-200 dark:hover:bg-dark-750 text-slate-700 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-dark-700 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+                          <span>View Full Screenshot</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Order Line Items */}
@@ -991,6 +1190,322 @@ export default function OrdersPage() {
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Tax Invoice</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. CUSTOMER DETAILS MODAL (Requested: Customer Name, Order Placed Date, Mobile Number, Address) */}
+      {customerModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-dark-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-dark-700 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-6 bg-gradient-to-r from-indigo-600 via-brand-600 to-indigo-700 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shadow-inner">
+                  <User className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Customer Details</h3>
+                  <p className="text-xs text-indigo-100 font-mono mt-0.5">Order #{customerModalOrder.orderNumber}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomerModalOrder(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content Fields */}
+            <div className="p-6 space-y-4">
+              {/* Customer Name */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-800 border border-slate-200/80 dark:border-dark-700/80">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
+                  Customer Name
+                </span>
+                <div className="text-base font-bold text-slate-900 dark:text-white">
+                  {customerModalOrder.customerName}
+                </div>
+              </div>
+
+              {/* Order Placed Date */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-800 border border-slate-200/80 dark:border-dark-700/80">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
+                  Order Placed Date
+                </span>
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                  <span>
+                    {new Date(customerModalOrder.createdAt).toLocaleDateString('en-IN', {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })} at {new Date(customerModalOrder.createdAt).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile Number */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-800 border border-slate-200/80 dark:border-dark-700/80">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
+                  Mobile Number
+                </span>
+                <div className="flex items-center justify-between">
+                  <div className="text-base font-mono font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-emerald-600" />
+                    <span>{customerModalOrder.customerPhone}</span>
+                  </div>
+                  <a
+                    href={`tel:${customerModalOrder.customerPhone}`}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs border border-emerald-500/20 transition-colors"
+                  >
+                    Call
+                  </a>
+                </div>
+              </div>
+
+              {/* Address for that order */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-800 border border-slate-200/80 dark:border-dark-700/80">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">
+                  Shipping Address For That Order
+                </span>
+                <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed flex items-start gap-2.5">
+                  <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span className="font-medium whitespace-pre-wrap">
+                    {customerModalOrder.shippingAddress || 'No address specified.'}
+                  </span>
+                </div>
+              </div>
+
+              {customerModalOrder.customerEmail && (
+                <div className="px-3 py-1 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Email: {customerModalOrder.customerEmail}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-dark-850 border-t border-slate-200 dark:border-dark-700 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCustomerModalOrder(null)}
+                className="px-6 py-2.5 rounded-xl bg-slate-200 dark:bg-dark-700 hover:bg-slate-300 dark:hover:bg-dark-600 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. PAYMENT STATUS UPDATE & SCREENSHOT UPLOAD MODAL */}
+      {paymentModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-dark-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-dark-700 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-extrabold text-white">Update Payment Status</h3>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  Order #{paymentModalOrder.orderNumber} · {paymentModalOrder.customerName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPaymentModalOrder(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSavePaymentStatus} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Change Payment Status *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setModalPaymentStatus('PAID')}
+                    className={`p-3 rounded-2xl border text-center font-bold text-xs transition-all cursor-pointer ${
+                      modalPaymentStatus === 'PAID'
+                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/30 shadow-sm'
+                        : 'bg-slate-50 dark:bg-dark-800 border-slate-200 dark:border-dark-700 text-slate-600 dark:text-slate-400 hover:border-emerald-300'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-emerald-500" />
+                    Payment Received
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalPaymentStatus('UNPAID')}
+                    className={`p-3 rounded-2xl border text-center font-bold text-xs transition-all cursor-pointer ${
+                      modalPaymentStatus === 'UNPAID'
+                        ? 'bg-amber-500/15 border-amber-500 text-amber-800 dark:text-amber-300 ring-2 ring-amber-500/30 shadow-sm'
+                        : 'bg-slate-50 dark:bg-dark-800 border-slate-200 dark:border-dark-700 text-slate-600 dark:text-slate-400 hover:border-amber-300'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4 mx-auto mb-1 text-amber-500" />
+                    Payment Pending
+                  </button>
+                </div>
+              </div>
+
+              {modalPaymentStatus === 'PAID' && (
+                <>
+                  {/* Screenshot upload */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Payment Received Screenshot Proof *
+                    </label>
+
+                    {modalPaymentProofPreview ? (
+                      <div className="relative rounded-2xl border border-slate-200 dark:border-dark-700 p-3 bg-slate-50 dark:bg-dark-800 flex items-center gap-3">
+                        <img
+                          src={modalPaymentProofPreview}
+                          alt="Payment Proof"
+                          className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-dark-700 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Screenshot Attached
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Proof will be stored with order record</p>
+                          <label className="mt-1.5 inline-block text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer">
+                            Upload Different Screenshot
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleProofFileChange}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalPaymentProof('');
+                            setModalPaymentProofPreview('');
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-200 dark:hover:bg-dark-700 transition-colors"
+                          title="Remove screenshot"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 dark:border-dark-700 rounded-2xl cursor-pointer hover:border-brand-500 transition-colors bg-slate-50/50 dark:bg-dark-800/50 group">
+                        <Upload className="w-8 h-8 text-brand-600 dark:text-brand-400 mb-2 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Click to Upload Payment Received Screenshot
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-1">PNG, JPG, JPEG, WEBP (Max 10MB)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleProofFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Payment Received Date */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Payment Received Date & Time *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={modalPaymentReceivedAt}
+                      onChange={(e) => setModalPaymentReceivedAt(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-800 border border-slate-200 dark:border-dark-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Notes */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Payment Notes / UPI / Bank Ref (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. UPI Ref #48194012, Received via GPay"
+                      value={modalPaymentNotes}
+                      onChange={(e) => setModalPaymentNotes(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-800 border border-slate-200 dark:border-dark-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-200 dark:border-dark-700 flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalOrder(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-dark-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-dark-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPayment}
+                  className="px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-md shadow-brand-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center space-x-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{savingPayment ? 'Saving...' : 'Save Payment Status'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. PAYMENT PROOF SCREENSHOT LIGHTBOX MODAL */}
+      {viewProofImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-dark-900 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-dark-700 flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-200 dark:border-dark-700 flex items-center justify-between bg-slate-50 dark:bg-dark-850">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">Payment Received Screenshot Proof</h3>
+                <p className="text-xs text-slate-500">Order #{viewProofImage.orderNumber} · {viewProofImage.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewProofImage(null)}
+                className="p-2 rounded-xl bg-slate-200 dark:bg-dark-750 text-slate-700 dark:text-slate-300 hover:text-rose-600 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-slate-950/20 dark:bg-slate-950/60">
+              <img
+                src={viewProofImage.url}
+                alt="Payment Receipt"
+                className="max-w-full max-h-[70vh] object-contain rounded-xl shadow-lg border border-slate-200 dark:border-dark-700"
+              />
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-dark-700 flex justify-end bg-slate-50 dark:bg-dark-850">
+              <button
+                type="button"
+                onClick={() => setViewProofImage(null)}
+                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-dark-700 hover:bg-slate-300 dark:hover:bg-dark-600 text-slate-800 dark:text-slate-200 font-bold text-xs cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>

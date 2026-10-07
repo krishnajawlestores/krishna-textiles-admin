@@ -133,7 +133,7 @@ export default function OffersPage() {
     if (!file) return;
     setCompressing(true);
     try {
-      const compressed = await compressImage(file, 500);
+      const compressed = await compressImage(file);
       setImagePreview(compressed);
       setFormData((prev) => ({ ...prev, bannerImage: compressed }));
     } catch (err) {
@@ -598,7 +598,7 @@ export default function OffersPage() {
                     <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
                       {compressing ? 'Processing & Compressing...' : 'Click to upload banner image'}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">JPEG, PNG, WebP • Auto-compressed to &lt; 500KB</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">JPEG, PNG, WebP • Auto-converted to WebP &amp; compressed &lt; 500KB</p>
                   </div>
                 )}
                 <input

@@ -493,7 +493,7 @@ export default function BrandsPage() {
                       <>
                         <Upload className="w-5 h-5 text-slate-400 mb-1" />
                         <span className="text-xs text-slate-500 dark:text-slate-400">Upload brand logo</span>
-                        <span className="text-[11px] text-slate-400">JPG, PNG, WEBP · WebP auto-compressed (&lt; 500KB)</span>
+                        <span className="text-[11px] text-slate-400">JPG, PNG, WEBP · Auto-converted to WebP &amp; compressed &lt; 500KB</span>
                       </>
                     )}
                   </div>

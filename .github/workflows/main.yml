@@ -59,14 +59,19 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
             "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -eu
+
           APP=/opt/ecommerce/admin/app
           ENV_FILE=/opt/ecommerce/env/admin.env
           cd "$APP"
 
-          # Protect local tracked changes, including lib/api.js.
+          # Refresh Git's index before checking for tracked changes.
+          git update-index --refresh
+
+          # Protect tracked local changes.
           if [ -n "$(git diff --name-only)" ] || [ -n "$(git diff --cached --name-only)" ]; then
             echo "ERROR: Tracked local changes detected. No deployment performed."
             echo "Commit or safely preserve the local changes before deploying."
+            git status --short
             exit 1
           fi
 
@@ -79,17 +84,19 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
 
+          # Load production environment variables.
           set -a
           . "$ENV_FILE"
           set +a
 
+          # Build a uniquely tagged image.
           NEW_TAG="krishna-jawli-admin:deploy-$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)"
 
           docker build \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             -t "$NEW_TAG" .
 
-          # Replace the live container only after a successful image build.
+          # Replace the live container after the image builds successfully.
           docker rm -f krishna-admin
 
           if docker run -d \
@@ -98,6 +105,7 @@ jobs:
             --network ecommerce-network \
             -p 127.0.0.1:3001:3001 \
             "$NEW_TAG"; then
+
             for i in $(seq 1 30); do
               if curl -fsS http://127.0.0.1:3001/ -o /dev/null; then
                 echo "Admin deployment healthy: $NEW_TAG"
@@ -107,13 +115,16 @@ jobs:
             done
           fi
 
+          # Roll back if the new container fails its health check.
           echo "ERROR: Admin deployment failed. Rolling back."
           docker rm -f krishna-admin >/dev/null 2>&1 || true
+
           docker run -d \
             --name krishna-admin \
             --restart unless-stopped \
             --network ecommerce-network \
             -p 127.0.0.1:3001:3001 \
             "$OLD_IMAGE_TAG"
+
           exit 1
           REMOTE

@@ -1,0 +1,119 @@
+name: Admin CI/CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+
+concurrency:
+  group: admin-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-admin:
+    name: Build and deploy Admin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify VPS and Admin configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          cd /opt/ecommerce/admin/app
+          test -f Dockerfile
+          test -f .dockerignore
+          test -f /opt/ecommerce/env/admin.env
+          docker ps --filter name='^krishna-admin$' --format '{{.Names}}' | grep -qx krishna-admin
+          echo "Admin pre-deployment checks passed."
+          REMOTE
+
+      - name: Deploy latest main commit
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes \
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          APP=/opt/ecommerce/admin/app
+          ENV_FILE=/opt/ecommerce/env/admin.env
+          cd "$APP"
+
+          # Protect local tracked changes, including lib/api.js.
+          if [ -n "$(git diff --name-only)" ] || [ -n "$(git diff --cached --name-only)" ]; then
+            echo "ERROR: Tracked local changes detected. No deployment performed."
+            echo "Commit or safely preserve the local changes before deploying."
+            exit 1
+          fi
+
+          # Save the current live image for rollback.
+          OLD_IMAGE_ID=$(docker inspect krishna-admin --format '{{.Image}}')
+          OLD_IMAGE_TAG="krishna-jawli-admin:rollback-$(date +%Y%m%d%H%M%S)"
+          docker image tag "$OLD_IMAGE_ID" "$OLD_IMAGE_TAG"
+
+          # Update tracked files without deleting untracked Docker files.
+          git fetch origin main
+          git reset --hard origin/main
+
+          set -a
+          . "$ENV_FILE"
+          set +a
+
+          NEW_TAG="krishna-jawli-admin:deploy-$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)"
+
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
+            -t "$NEW_TAG" .
+
+          # Replace the live container only after a successful image build.
+          docker rm -f krishna-admin
+
+          if docker run -d \
+            --name krishna-admin \
+            --restart unless-stopped \
+            --network ecommerce-network \
+            -p 127.0.0.1:3001:3001 \
+            "$NEW_TAG"; then
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:3001/ -o /dev/null; then
+                echo "Admin deployment healthy: $NEW_TAG"
+                exit 0
+              fi
+              sleep 2
+            done
+          fi
+
+          echo "ERROR: Admin deployment failed. Rolling back."
+          docker rm -f krishna-admin >/dev/null 2>&1 || true
+          docker run -d \
+            --name krishna-admin \
+            --restart unless-stopped \
+            --network ecommerce-network \
+            -p 127.0.0.1:3001:3001 \
+            "$OLD_IMAGE_TAG"
+          exit 1
+          REMOTE

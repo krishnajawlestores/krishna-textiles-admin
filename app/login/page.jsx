@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -45,7 +45,7 @@ export default function LoginPage() {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-500/25">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Krishna Textiles</h2>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Krishna Jawli Stores</h2>
           <p className="text-xs text-slate-400 mt-1">Enterprise ERP & Operations Control Center</p>
         </div>
 

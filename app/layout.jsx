@@ -1,11 +1,11 @@
-import './globals.css';
+﻿import './globals.css';
 import AdminShell from '@/components/AdminShell';
 import { ThemeProvider } from './ThemeContext';
 import { ModalProvider } from './ModalContext';
 
 export const metadata = {
-  title: 'Krishna Textiles - Enterprise Management Portal',
-  description: 'Enterprise ERP for Krishna Textiles: Inventory, Order Fulfillment, CRM & Analytics',
+  title: 'Krishna Jawli Stores - Enterprise Management Portal',
+  description: 'Enterprise ERP for Krishna Jawli Stores: Inventory, Order Fulfillment, CRM & Analytics',
 };
 
 export default function RootLayout({ children }) {
